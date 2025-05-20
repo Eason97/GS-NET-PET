@@ -28,19 +28,3 @@ def to_ssim_skimage(dehaze, gt):
     gt_list_np = [gt_list[ind].permute(0, 2, 3, 1).data.cpu().numpy().squeeze() for ind in range(len(dehaze_list))]
     ssim_list = [ssim(dehaze_list_np[ind],  gt_list_np[ind], data_range=1, multichannel=True) for ind in range(len(dehaze_list))]
     return ssim_list
-
-
-# def to_ssim_skimage(dehaze, gt):
-#     # Split the batches into lists of single images
-#     dehaze_list = torch.split(dehaze, 1, dim=0)
-#     gt_list = torch.split(gt, 1, dim=0)
-#     # Convert tensors to NumPy arrays suitable for SSIM computation
-#     dehaze_np = [dhz.squeeze().permute(1, 2, 0).cpu().numpy() for dhz in dehaze_list]
-#     gt_np = [gt_img.squeeze().permute(1, 2, 0).cpu().numpy() for gt_img in gt_list]
-#     # Compute SSIM for each pair
-#     ssim_list = [ssim(dhz_img, gt_img, data_range=1, multichannel=True) for dhz_img, gt_img in zip(dehaze_np, gt_np)]
-#     return ssim_list
-
-
-
-

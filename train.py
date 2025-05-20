@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 import os
 from utils import to_psnr,to_ssim_skimage,to_rmse
 from tensorboardX import SummaryWriter
-from torchvision.utils import save_image as imwrite
 import torch.nn.functional as F
 import numpy as np
 import random
@@ -32,10 +31,9 @@ args = parser.parse_args()
 learning_rate = args.learning_rate
 train_batch_size = args.train_batch_size
 train_epoch = args.train_epoch
-# /home/eason/Videos/20240804_lqpet50_dataset
-train_dataset_dir = os.path.join('/home/eason/Videos/20240804_lqpet50_dataset/')
+train_dataset_dir = os.path.join('training_dataset_location')
 # --- test --- #
-test_dataset_dir = os.path.join('/home/eason/Videos/20240804_lqpet50_dataset/')
+test_dataset_dir = os.path.join('testing_dataset_location')
 predict_result = args.predict_result
 test_batch_size = args.test_batch_size
 
@@ -54,17 +52,16 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # --- Set the random seed for reproducibility --- #
 def set_random_seed(seed_value):
     torch.manual_seed(seed_value)
-    torch.cuda.manual_seed_all(seed_value)  # For CUDA-enabled GPUs
+    torch.cuda.manual_seed_all(seed_value)
     np.random.seed(seed_value)
     random.seed(seed_value)
-    torch.backends.cudnn.deterministic = True  # For consistent results on the CuDNN backend
-    torch.backends.cudnn.benchmark = False  # For consistent results on the CuDNN backend
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 seed_value = 42
 set_random_seed(seed_value)
 
 # --- Define the network --- #
-# /home/eason/Videos/20240804_lqpet50_dataset/udpet_system_A.npy
-A = np.load('/home/eason/Videos/20240804_lqpet50_dataset/udpet_system_A.npy')
+A = np.load('system_matrix_location')
 sys_mat= np_to_torch(A).to(device)
 sys_mat.requires_grad = False
 
@@ -82,11 +79,6 @@ test_dataset = pet_test_dataset(test_dataset_dir)
 test_loader = DataLoader(dataset=test_dataset, batch_size=test_batch_size, shuffle=True,num_workers=10, pin_memory=True)
 
 GNet= GNet.to(device)
-# Load the model checkpoint
-# checkpoint = torch.load('gsnet_100k_epoch320.pkl', map_location=device)
-# GNet.load_state_dict(checkpoint)
-
-
 writer = SummaryWriter()
 # --- Start training --- #
 iteration = 0
@@ -108,28 +100,20 @@ def check_for_nans(model):
     return False, None
 
 
-initial_consist_weight = 0.0001
-initial_frobenius_weight = 0.0000001
+initial_consist_weight = 1e-3
+initial_frobenius_weight = 1e-8
 adjusted_consist_weight = initial_consist_weight
 adjusted_frobenius_weight = initial_frobenius_weight
 
 
 def update_weights(sinogram_loss, consist_loss, frobenius_loss):
     global adjusted_consist_weight, adjusted_frobenius_weight
-
-    # Detach the tensors from the computation graph, move them to CPU, and convert to numpy
     sinogram_loss_cpu = sinogram_loss.detach().cpu().numpy()
     consist_loss_cpu = consist_loss.detach().cpu().numpy()
     frobenius_loss_cpu = frobenius_loss.detach().cpu().numpy()
-
-    # Calculate the order of magnitude of sinogram_loss
     magnitude_sinogram = 10 ** np.floor(np.log10(sinogram_loss_cpu))
-
-    # Set the weights for consist_loss and frobenius_loss
     adjusted_consist_weight = 0.1 * magnitude_sinogram / consist_loss_cpu
     adjusted_frobenius_weight = 0.1 * magnitude_sinogram / frobenius_loss_cpu
-
-    # Ensure the adjusted weights do not exceed the initial weights
     adjusted_consist_weight = min(adjusted_consist_weight, initial_consist_weight)
     adjusted_frobenius_weight = min(adjusted_frobenius_weight, initial_frobenius_weight)
 
@@ -139,7 +123,6 @@ layer_num=10
 msssim_loss = msssim
 for epoch in range(train_epoch):
     GNet.train()
-    # scheduler.step()
     epoch_loss = 0
     for batch_idx, (sin, img, gt_sin) in enumerate(train_loader):
         iteration += 1
@@ -170,20 +153,9 @@ for epoch in range(train_epoch):
         frobenius_loss = 0.25 * frobenius_loss
 
         msssim_loss_ = -msssim_loss(rec_pet, img, normalize=True)
-        #0.2 * msssim_loss_+
-        total_loss = mse_loss + sinogram_loss + adjusted_consist_weight * consist_loss + adjusted_frobenius_weight * frobenius_loss
+        total_loss = mse_loss + 0.2 * msssim_loss_+sinogram_loss + adjusted_consist_weight * consist_loss + adjusted_frobenius_weight * frobenius_loss
         total_loss.backward()
-
-
-        nan_found, problematic_layer = check_for_nans(GNet)
-        if nan_found:
-            print(f"NaN detected in parameters of the layer: {problematic_layer}")
-            break
-
-        torch.nn.utils.clip_grad_norm_(GNet.parameters(), max_norm=2.0)
         G_optimizer.step()
-
-        # Log losses and total loss for monitoring
         writer.add_scalars('Losses', {
             'mse_loss': mse_loss.item(),
             'sinogram_loss': sinogram_loss.item(),
@@ -191,10 +163,7 @@ for epoch in range(train_epoch):
             'frobenius_loss':adjusted_frobenius_weight * frobenius_loss.item(),
             'Total Loss': total_loss.item()}, iteration)
 
-        # Accumulate total loss for the epoch
         epoch_loss += total_loss.item()
-
-    # Calculate and log the average loss for the epoch
     average_epoch_loss = epoch_loss / len(train_loader)
     train_loss_list.append(average_epoch_loss)
     update_weights(sinogram_loss, consist_loss, frobenius_loss)
@@ -236,9 +205,3 @@ for epoch in range(train_epoch):
             file_path = os.path.join('metrics', 'training_metrics.txt')
             with open(file_path, 'a') as f:
                 f.write(f"{epoch},{epoch_loss / len(train_loader)},{average_test_loss},{avr_psnr},{avr_ssim},{avr_rmse}\n")
-
-            # Save the model only if the current PSNR is greater than the previous best PSNR
-            if avr_psnr > best_psnr or avr_ssim>0.75:
-                print(f"New best ssim achieved: {avr_psnr,avr_ssim}. Saving model...")
-                torch.save(GNet.state_dict(), os.path.join(args.model_save_dir, 'gsnet_100k_epoch' + str(epoch) + '.pkl'))
-                best_psnr = avr_psnr

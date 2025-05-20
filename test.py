@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from torchvision import transforms, utils
+from torchvision import utils
 import os
 from admm_mapem import ADMM_NET
 from test_dataset import pet_test_dataset
@@ -13,23 +13,23 @@ def np_to_torch(array):
     return torch.from_numpy(array).float()
 
 # --- Define the network --- #
-A = np.load('/home/eason/Videos/20240804_lqpet50_dataset/udpet_system_A.npy')
+A = np.load('system_matrix_location')
 sys_mat= np_to_torch(A).to(device)
 sys_mat.requires_grad = False
 
 # Load model
-model_path = 'gsnet_100k_epoch300.pkl'
+model_path = 'pre-trained weights'
 model= ADMM_NET(144, 205, 180, 1,10).to(device)
 model.load_state_dict(torch.load(model_path))
 
 # Load test dataset
-test_dataset_dir = '/home/eason/Videos/20240804_lqpet50_dataset/'
+test_dataset_dir = 'testing_dataset_location'
 test_dataset = pet_test_dataset(test_dataset_dir)
 test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
 
 
 # Directory to save images
-output_dir = '07_gsnet_output'
+output_dir = 'gsnet_output'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
