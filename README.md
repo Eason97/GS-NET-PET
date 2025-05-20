@@ -1,6 +1,6 @@
 ## Purpose
 
-Most existing deep learning methods for low-count PET reconstruction overlook the statistical and structural properties of PET data. We propose **GS-Net**, an unrolled ADMM-based network that integrates:
+We propose **GS-Net**, an unrolled ADMM-based network that integrates:
 
 - Poisson likelihood modeling for fidelity,
 - A generalized sparse prior via ReLU-based CNN,
@@ -9,7 +9,7 @@ Most existing deep learning methods for low-count PET reconstruction overlook th
 
 GS-Net combines model-driven rigor with the flexibility of deep learning, improving both interpretability and performance.
 
-![GS-Net Architecture](figures/gsnet_architecture.png)
+![GS-Net Architecture](img/admm_pet.png)
 
 ---
 
@@ -17,7 +17,8 @@ GS-Net combines model-driven rigor with the flexibility of deep learning, improv
 
 We evaluated GS-Net on simulated brain and real whole-body PET datasets under various count levels (1%, 2%, 5%, 10%). Compared to FBP, EM-Gaussian, DeepPET, and other unrolled methods, GS-Net achieves superior reconstruction quality in both PSNR and SSIM.
 
-![Quantitative Comparison](figures/quantitative_results.png)
+![Comparison A](img/dose1_2.png)
+![Comparison b](img/dose5_10.png)
 
 
 ## Usage
@@ -26,8 +27,4 @@ We evaluated GS-Net on simulated brain and real whole-body PET datasets under va
 Run the following script to start training:
 ```bash
 python scripts/train.py
-
 python scripts/test.py
-
-
-
